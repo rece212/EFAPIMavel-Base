@@ -1,24 +1,73 @@
 
 using EFAPIMavel.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 
 namespace EFAPIMavel
 {
     public class Program
     {
         //static DbApiContext db = new DbApiContext();
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
-            // Add services to the container.
+            builder.Services.AddDbContext<DbApiContext>(options =>
+            options.UseSqlServer("Server=VCECPELITPC2;Initial Catalog=dbAPI;Integrated Security=True;Encrypt=False;"));
+            
+            #region Set up
+            builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+            .AddEntityFrameworkStores<DbApiContext>()
+            .AddDefaultTokenProviders();
+            #endregion
             builder.Services.AddAuthorization();
-
-            // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+
+            #region Swagger add bearer to top
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.SwaggerDoc("v1", new OpenApiInfo { Title = "Marvel API", Version = "v1" });
+
+                // Add JWT Authentication
+                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT",
+                    In = ParameterLocation.Header,
+                    Description = "Enter your valid token in the text input below.\n\nExample: \" abcdef12345\""
+                });
+
+                options.AddSecurityRequirement(new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference = new OpenApiReference
+                            {
+                                Type = ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        new string[] {}
+                    }
+                });
+            });
+            #endregion
 
             var app = builder.Build();
-
+            #region Create roles
+            using (var scope = app.Services.CreateScope())
+            {
+                var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+                await EnsureRolesAsync(roleManager);
+            }
+            #endregion
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
@@ -155,5 +204,45 @@ namespace EFAPIMavel
 
             app.Run();
         }
+        #region Generate JWT Token with user rights
+        private static string GenerateJwtToken(IdentityUser user, UserManager<IdentityUser> userManager)
+        {
+            var userRoles = userManager.GetRolesAsync(user).Result;
+            var claims = new List<Claim>
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            claims.AddRange(userRoles.Select(role => new Claim(ClaimTypes.Role, role)));
+
+            var key = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes("ehp8LjNkF58gRJED7jszQYvmE+nrOSmicxpspxNoPV8="));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: "MavelAPI",
+                audience: "MavelAPI",
+                claims: claims,
+                expires: DateTime.Now.AddMinutes(30),
+                signingCredentials: creds);
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+        #endregion
+        #region Add user roles to DB
+        private static async Task EnsureRolesAsync(RoleManager<IdentityRole> roleManager)
+        {
+            var roles = new[] { "Admin", "User" };
+            foreach (var role in roles)
+            {
+                if (!await roleManager.RoleExistsAsync(role))
+                {
+                    await roleManager.CreateAsync(new IdentityRole(role));
+                }
+            }
+        }
+        #endregion
+
     }
 }

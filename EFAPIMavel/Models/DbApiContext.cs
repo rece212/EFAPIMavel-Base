@@ -1,10 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace EFAPIMavel.Models;
 
-public partial class DbApiContext : DbContext
+public partial class DbApiContext : IdentityDbContext<IdentityUser, IdentityRole, string,
+        IdentityUserClaim<string>, IdentityUserRole<string>, IdentityUserLogin<string>,
+        IdentityRoleClaim<string>, IdentityUserToken<string>>
 {
     public DbApiContext()
     {
@@ -20,14 +24,13 @@ public partial class DbApiContext : DbContext
     public virtual DbSet<TblContact> TblContacts { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
         => optionsBuilder.UseSqlServer("Server=VCECPELITPC2;Initial Catalog=dbAPI;Integrated Security=True;Encrypt=False;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<TblAvenger>(entity =>
         {
-            entity.HasKey(e => e.Username).HasName("PK__tblAveng__536C85E5490A9D67");
+            entity.HasKey(e => e.Username).HasName("PK_tblAvenger");
 
             entity.ToTable("tblAvengers");
 
@@ -41,7 +44,7 @@ public partial class DbApiContext : DbContext
 
         modelBuilder.Entity<TblContact>(entity =>
         {
-            entity.HasKey(e => e.AvengerId).HasName("PK__tblConta__3E460B6A50A516A9");
+            entity.HasKey(e => e.AvengerId).HasName("PK_tblContact");
 
             entity.ToTable("tblContacts");
 
@@ -67,7 +70,14 @@ public partial class DbApiContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__tblContac__Usern__398D8EEE");
         });
+        // Define the primary key for IdentityUserLogin<string>
+        modelBuilder.Entity<IdentityUserLogin<string>>().HasKey(login => new { login.LoginProvider,
+            login.ProviderKey });
 
+        // Define primary keys for other Identity entities if needed
+        modelBuilder.Entity<IdentityUserRole<string>>().HasKey(role => new { role.UserId, role.RoleId });
+        modelBuilder.Entity<IdentityUserToken<string>>().HasKey(token => new { token.UserId, token.LoginProvider, 
+            token.Name });
         OnModelCreatingPartial(modelBuilder);
     }
 
