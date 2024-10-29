@@ -1,5 +1,6 @@
 
 using EFAPIMavel.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -76,8 +77,45 @@ namespace EFAPIMavel
             }
 
             app.UseHttpsRedirection();
-
+            app.UseAuthentication();//need this , dont forget to add it :) 
             app.UseAuthorization();
+
+            #region Add user and check user admin or user
+            app.MapPost("/register", async (UserRegistrationDto model, UserManager<IdentityUser> userManager, 
+                RoleManager<IdentityRole> roleManager) => {
+                var user = new IdentityUser { UserName = model.Username, Email = model.Email };
+                var result = await userManager.CreateAsync(user, model.Password);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(user, model.Role);
+                    return Results.Created($"/users/{user.UserName}", user);
+                }
+                return Results.BadRequest(result.Errors);
+            }).WithName("RegisterUser").WithOpenApi();
+
+            app.MapPost("/login", async (UserLoginDto model, SignInManager<IdentityUser> signInManager, 
+                UserManager<IdentityUser> userManager) => {
+                var user = await userManager.FindByNameAsync(model.Username);
+                if (user != null)
+                {
+                    var result = await signInManager.PasswordSignInAsync(model.Username, model.Password, 
+                        false, false);
+                    if (result.Succeeded)
+                    {
+                        var token = GenerateJwtToken(user, userManager);
+                        return Results.Ok(new { Token = token });
+                    }
+                }
+                return Results.Unauthorized();
+            }).WithName("LoginUser").WithOpenApi();
+            app.MapGet("/admin", [Authorize(Roles = "Admin")] () => "Welcome Admin").WithName("AdminEndpoint").WithOpenApi();
+            app.MapGet("/user", [Authorize(Roles = "User")] () => "Welcome User").WithName("UserEndpoint").WithOpenApi();
+           #endregion
+
+
+
+
+
             // GET endpoints
             app.MapGet("/users", () =>
             {
