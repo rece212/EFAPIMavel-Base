@@ -1,9 +1,8 @@
-This step is optional and should only be used if you need further customization.
+ Additional Migration for Schema Changes
 
-## Usage
+If there are any additional schema changes required, you can add them as follows:
 
-1. Start the API project with `dotnet run`.
-2. Access Swagger UI at `https://localhost:{port}/swagger` to test API endpoints.
-3. Use `/register` and `/login` endpoints for managing user authentication.
-
-## Endpoints
+```bash
+dotnet ef migrations add AdditionalSchemaChanges -c DbApiContext
+dotnet ef database update -c DbApiContext
+```
